@@ -1,24 +1,18 @@
-tcp_flow_spy
+TCP-Flow-Spy
 ============
     Version: 0.2
-    Author: Soheil Hassas Yeganeh <soheil@cs.toronto.edu>
-                based on tcp_probe by Stephen Hemminger <shemminger@osdl.org>
+    Author: Parham Alvani <parham.alvani@gmail.com>
+    based on tcp_flow_spy Soheil Hassas Yeganeh <soheil@cs.toronto.edu>
+    based on tcp_probe by Stephen Hemminger <shemminger@osdl.org>
 
 Introduction
 ------------
-This is a kernel module similar to tcp_probe which collects flow level
-statistics.
+This is a kernel module based to [tcp_flow_spy](https://github.com/soheilhy/tcp_flow_spy)
+which collects flow level statistics.
 
-Installation
-------------
+#Installation
+
 ```
     # make all
     # make install
 ```
-
-Papers
-------
-This kernel module is the main functionality of OpenTCP:
-
-[Monia Ghobadi, Soheil Hassas Yeganeh, Yashar Ganjali, "Rethinking End-to-end Congestion Control in Software-defined Networks"](http://dl.acm.org/citation.cfm?id=2390242)
-
