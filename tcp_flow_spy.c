@@ -1,4 +1,16 @@
 /*
+ * In The Name Of God
+ * ========================================
+ * [] File Name : tcp_flow_spy.c
+ *
+ * [] Creation Date : 27-03-2015
+ *
+ * [] Last Modified : Fri 27 Mar 2015 02:18:12 AM IRDT
+ *
+ * [] Created By : Parham Alvani (parham.alvani@gmail.com)
+ * =======================================
+*/
+/*
  * tcpflowspy - Observe the TCP flow summerized information with kprobes.
  *
  * This module is based on tcpflowprobe:
@@ -34,21 +46,9 @@
 #include <linux/delay.h>
 #include <net/tcp.h>
 
-// #define TCP_FLOW_SPY_DEBUG
+#include "tcp_flow_spy.h"
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-#define SPY_COMPAT 18
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
-#define SPY_COMPAT 32
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35))
-#define SPY_COMPAT 34
-#else
-#define SPY_COMPAT 35
-#endif
-
-#define HASHTABLE_SIZE 1357
-#define MAX_CONTINOUS 128
-#define SECTION_COUNT (bufsize / MAX_CONTINOUS)
+/* #define TCP_FLOW_SPY_DEBUG */
 
 MODULE_AUTHOR("Soheil Hassas Yeganeh <soheil@cs.toronto.edu>");
 MODULE_DESCRIPTION("TCP flow snooper");
@@ -67,87 +67,19 @@ static int bucket_length __read_mostly = 1;
 MODULE_PARM_DESC(bucket_length, "Length of each bucket in the histogram (1) except the last bucket length is not bounded.");
 module_param(bucket_length, int, 0);
 
-//static int number_of_buckets  __read_mostly = 1;
-//MODULE_PARM_DESC(number_of_buckets, "Number of buckets in the histogram (1)");
-//module_param(number_of_buckets, int, 0);
-
-#define NUMBER_OF_BUCKETS   10
+/*
+ * static int number_of_buckets  __read_mostly = 1;
+ * MODULE_PARM_DESC(number_of_buckets, "Number of buckets in the histogram (1)");
+ * module_param(number_of_buckets, int, 0);
+*/
 
 static int live __read_mostly = 0;
 MODULE_PARM_DESC(live, "(0) stats of completed flows are printed, (1) stats of live flows are printed.");
 module_param(live, int, 0);
 
-static struct tcp_flow_log* last_printed_flow_log = NULL;
+static struct tcp_flow_log *last_printed_flow_log = NULL;
 
 static const char procname[] = "tcpflowspy";
-
-struct tcp_flow_log {
-    struct timespec first_packet_tstamp;
-    struct timespec last_packet_tstamp;
-    struct timespec last_printed_tstamp;
-
-    __be32	saddr, daddr;
-    __be16	sport, dport;
-
-    u32 recv_count; // No of received packets
-    u32 snd_count; // No of sent packets
-    u64	recv_size; // Avg length of the packet
-    u64 snd_size; // Total size of packets in byte
-
-    u32 last_recv_seq;
-    u32 last_snd_seq;
-
-    u32 out_of_order_packets;
-    u32 total_retransmissions;
-
-    u32 snd_cwnd_clamp;
-    u32	ssthresh;
-    u32	srtt;
-    u32 rttvar;
-    u32 last_cwnd;
-    u32 rto;
-
-    int used;
-
-    u32 snd_cwnd_histogram[NUMBER_OF_BUCKETS];
-
-    spinlock_t lock;
-
-    u32 buff_size;
-    u32 max_buff_size;
-
-    struct tcp_flow_log* used_thread_next;
-    struct tcp_flow_log* used_thread_prev;
-
-    struct tcp_flow_log* next;
-    struct tcp_flow_log* prev;
-};
-
-static struct {
-    spinlock_t	lock;
-    wait_queue_head_t wait;
-   	struct timespec	start;
-    struct timespec last_update;
-    struct timespec last_read;
-
-    struct tcp_flow_log *available;
-    struct tcp_flow_log **storage;
-    struct tcp_flow_log *finished;
-    struct tcp_flow_log *used;
-} tcp_flow_spy;
-
-struct hashtable_entry {
-    spinlock_t lock;
-    struct tcp_flow_log* head;
-    struct tcp_flow_log* tail;
-};
-
-static struct {
-//    u32 count;
-
-    struct hashtable_entry* entries;
-} tcp_flow_hashtable;
-
 
 static inline struct timespec get_time(void) {
     struct timespec ts;
@@ -917,55 +849,50 @@ static const struct file_operations tcpflowspy_fops = {
 };
 
 static __init int tcpflowspy_init(void) {
-    int ret = -ENOMEM;
-    int i = 0;
-    init_waitqueue_head(&tcp_flow_spy.wait);
-    spin_lock_init(&tcp_flow_spy.lock);
+	int ret = -ENOMEM;
+	int i = 0;
+	init_waitqueue_head(&tcp_flow_spy.wait);
+	spin_lock_init(&tcp_flow_spy.lock);
 
-    if (bufsize == 0) {
-        return -EINVAL;
-    }
+	if (bufsize == 0)
+		return -EINVAL;
 
-    bufsize = roundup_pow_of_two(bufsize);
+    	bufsize = roundup_pow_of_two(bufsize);
 
-    tcp_flow_spy.storage =
-        kcalloc(SECTION_COUNT, sizeof(struct tcp_flow_log*), GFP_KERNEL);
-    if (!tcp_flow_spy.storage) {
-        goto err0;
-    }
+	tcp_flow_spy.storage =
+		kcalloc(SECTION_COUNT, sizeof(struct tcp_flow_log*), GFP_KERNEL);
+
+	if (!tcp_flow_spy.storage)
+		goto err0;
 
 
-    for (i = 0; i < SECTION_COUNT; i++) {
+	for (i = 0; i < SECTION_COUNT; i++) {
 
-        tcp_flow_spy.storage[i] =
-            kcalloc(MAX_CONTINOUS, sizeof(struct tcp_flow_log), GFP_KERNEL);
+		tcp_flow_spy.storage[i] =
+			kcalloc(MAX_CONTINOUS, sizeof(struct tcp_flow_log), GFP_KERNEL);
 
-        if (!tcp_flow_spy.storage[i]) {
-            int j = 0;
-            for (j = 0; j < i; j++) {
-                kfree(tcp_flow_spy.storage[j]);
-            }
-            goto err0;
-        }
+        	if (!tcp_flow_spy.storage[i]) {
+            		int j = 0;
+            		for (j = 0; j < i; j++) {
+                		kfree(tcp_flow_spy.storage[j]);
+            		}
+            		goto err0;
+        	}
+    	}
 
-    }
+	tcp_flow_spy.available = tcp_flow_spy.storage[0];
+	tcp_flow_spy.finished = NULL;
+	tcp_flow_spy.used = NULL;
 
-    tcp_flow_spy.available = tcp_flow_spy.storage[0];
-    tcp_flow_spy.finished = NULL;
-    tcp_flow_spy.used = NULL;
+	if (!initialize_hashtable(HASHTABLE_SIZE))
+        	goto err2;
 
-    if (!initialize_hashtable(HASHTABLE_SIZE)) {
-        goto err2;
-    }
-
-    if (!proc_net_fops_create(
+	if (!proc_net_fops_create(
 #if SPY_COMPAT >= 32
-                &init_net,
+				&init_net,
 #endif
-                procname, S_IRUSR | S_IRGRP | S_IROTH,
-                &tcpflowspy_fops)) {
-        goto err2;
-    }
+				procname, S_IRUSR | S_IRGRP | S_IROTH, &tcpflowspy_fops))
+		goto err2;
 
     ret = register_jprobe(&tcp_recv_jprobe);
     if (ret) {
