@@ -5,7 +5,7 @@
  *
  * [] Creation Date : 27-03-2015
  *
- * [] Last Modified : Fri 27 Mar 2015 02:12:08 AM IRDT
+ * [] Last Modified : Fri 27 Mar 2015 02:50:41 AM IRDT
  *
  * [] Created By : Parham Alvani (parham.alvani@gmail.com)
  * =======================================
@@ -13,21 +13,19 @@
 #ifndef TCP_FLOW_SPY_H
 #define TCP_FLOW_SPY_H
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-#define SPY_COMPAT 18
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,34))
-#define SPY_COMPAT 32
-#elif (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35))
-#define SPY_COMPAT 34
-#else
 #define SPY_COMPAT 35
-#endif
 
 #define HASHTABLE_SIZE 1357
 #define MAX_CONTINOUS 128
 #define SECTION_COUNT (bufsize / MAX_CONTINOUS)
 
 #define NUMBER_OF_BUCKETS   10
+
+#define FINISHED_STATES \
+	(TCPF_CLOSE|TCPF_CLOSING|TCPF_TIME_WAIT|TCPF_LAST_ACK)
+
+#define is_finished(s) ((1 << s->sk_state) & FINISHED_STATES)
+
 
 struct tcp_flow_log {
 	struct timespec first_packet_tstamp;
